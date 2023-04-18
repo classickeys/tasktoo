@@ -1,82 +1,68 @@
 package xmlreader;
 
+import org.xml.sax.Attributes;
+import org.xml.sax.SAXException;
+import org.xml.sax.helpers.DefaultHandler;
+
 import java.io.File;
-import java.util.*;
-
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.DocumentBuilder;
-
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.parsers.SAXParser;
+import javax.xml.parsers.SAXParserFactory;
 
 public class XMLReader {
 
     public static void main(String[] args) {
-
-        Scanner scanner = new Scanner(System.in);
-        System.out.print("Enter path of XML file: ");
-        String xmlFilePath = scanner.nextLine();
-
-        File xmlFile = new File(xmlFilePath);
-        if (!xmlFile.exists()) {
-            System.out.println("File not found: " + xmlFilePath);
-            scanner.close();
+        if (args.length != 2) {
+            System.out.println("Usage: java XMLReader data.xml name,postalZip,region,country,address,list");
             return;
         }
 
-        DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
-        DocumentBuilder dBuilder;
+        String filename = args[0];
+        String[] fields = args[1].split(",");
+
+        SAXParserFactory factory = SAXParserFactory.newInstance();
         try {
-            dBuilder = dbFactory.newDocumentBuilder();
-            Document doc = dBuilder.parse(xmlFile);
-
-            System.out.print("Enter field names (comma-separated): ");
-            String fieldNamesString = scanner.nextLine();
-            List<String> fields = Arrays.asList(fieldNamesString.split(","));
-
-            Map<String, String> fieldValues = extractFieldValues(doc, fields);
-
-            ObjectMapper objectMapper = new ObjectMapper();
-            try {
-                String json = objectMapper.writeValueAsString(fieldValues);
-                System.out.println(json);
-            } catch (JsonProcessingException e) {
-                System.out.println("Error generating JSON: " + e.getMessage());
-            }
-
-        } catch (Exception e) {
-            System.out.println("Error reading XML file: " + e.getMessage());
+            SAXParser saxParser = factory.newSAXParser();
+            UserHandler userHandler = new UserHandler(fields);
+            saxParser.parse(new File(filename), userHandler);
+        } catch (ParserConfigurationException | SAXException | IOException e) {
+            e.printStackTrace();
         }
-
-        scanner.close();
     }
 
-    private static Map<String, String> extractFieldValues(Document doc, List<String> fields) {
-        Map<String, String> fieldValues = new HashMap<>();
-        Element root = doc.getDocumentElement();
+    private static class UserHandler extends DefaultHandler {
+        private List<String> selectedFields;
+        private String currentField;
+        private StringBuilder currentText;
 
-        for (String field : fields) {
-            // Check if the field exists in the XML file
-            NodeList nodeList = root.getElementsByTagName(field);
-            if (nodeList.getLength() == 0) {
-                System.out.println("Field '" + field + "' not found in XML file.");
-                continue;
+        public UserHandler(String[] fields) {
+            selectedFields = new ArrayList<>();
+            for (String field : fields) {
+                selectedFields.add(field.trim());
             }
+            currentText = new StringBuilder();
+        }
 
-            // Get the value of the first matching field
-            Node node = nodeList.item(0);
-            if (node.getNodeType() == Node.ELEMENT_NODE) {
-                Element element = (Element) node;
-                fieldValues.put(field, element.getTextContent());
+        @Override
+        public void startElement(String uri, String localName, String qName, Attributes attributes)
+                throws SAXException {
+            currentField = qName;
+            currentText.setLength(0);
+        }
+
+        @Override
+        public void endElement(String uri, String localName, String qName) throws SAXException {
+            if (selectedFields.contains(qName)) {
+                System.out.println(qName + ": " + currentText.toString().trim());
             }
         }
 
-        return fieldValues;
+        @Override
+        public void characters(char[] ch, int start, int length) throws SAXException {
+            currentText.append(ch, start, length);
+        }
     }
-
 }
